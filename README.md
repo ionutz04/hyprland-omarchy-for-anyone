@@ -82,7 +82,7 @@ Be aware of these gaps:
 ## Licensing
 
 Hyprland and aquamarine are BSD-3-Clause; Omarchy is MIT. This repo contains only a patch against
-aquamarine, scripts and notes. Choose a licence for your own part before publishing.
+aquamarine, scripts and notes. Licence for this repo is AGPL.
 
 ## Layout
 
