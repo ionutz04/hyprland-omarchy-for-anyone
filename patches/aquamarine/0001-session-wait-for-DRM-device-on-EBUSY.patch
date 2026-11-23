@@ -1,0 +1,54 @@
+From 3f0c73611ed7db79cfbb163e1873fe09ffec66a7 Mon Sep 17 00:00:00 2001
+From: local-fork <local-fork@localhost>
+Date: Mon, 23 Nov 2026 19:18:31 +0200
+Subject: [PATCH] session: wait for DRM device on EBUSY instead of failing
+
+On multiseat / display-manager setups the previous owner of the GPU can still
+hold DRM master for a moment after the new session starts, so logind answers
+EBUSY to TakeDevice. Retry for up to 15s (dispatching libseat events) instead
+of failing the whole backend immediately.
+---
+ src/backend/Session.cpp | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/src/backend/Session.cpp b/src/backend/Session.cpp
+index 27abc30..d76e5b4 100644
+--- a/src/backend/Session.cpp
++++ b/src/backend/Session.cpp
+@@ -1,4 +1,6 @@
+ #include <aquamarine/backend/Backend.hpp>
++#include <thread>
++#include <chrono>
+ #include <cerrno>
+ #include <fcntl.h>
+ #include "Shared.hpp"
+@@ -133,8 +135,25 @@ static const libinput_interface libinputListener = {
+ 
+ Aquamarine::CSessionDevice::CSessionDevice(Hyprutils::Memory::CSharedPointer<CSession> session_, const std::string& path_) : path(path_), session(session_) {
+     deviceID = libseat_open_device(session->libseatHandle, path.c_str(), &fd);
++
++    // On multiseat / display-manager setups the previous owner of the GPU (e.g. the greeter's display
++    // server) may still hold DRM master for a moment after our session starts, so logind answers
++    // EBUSY. Instead of giving up immediately, wait for it to let go.
++    if (deviceID < 0 && errno == EBUSY) {
++        constexpr int RETRY_INTERVAL_MS = 100;
++        constexpr int MAX_WAIT_MS       = 15000;
++        session->backend->log(AQ_LOG_WARNING, std::format("libseat: {} is busy, waiting up to {}ms for it to be released", path_, MAX_WAIT_MS));
++        for (int waited = 0; waited < MAX_WAIT_MS && deviceID < 0 && errno == EBUSY; waited += RETRY_INTERVAL_MS) {
++            libseat_dispatch(session->libseatHandle, 0);
++            std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_INTERVAL_MS));
++            deviceID = libseat_open_device(session->libseatHandle, path.c_str(), &fd);
++            if (deviceID >= 0)
++                session->backend->log(AQ_LOG_WARNING, std::format("libseat: {} became available after ~{}ms", path_, waited + RETRY_INTERVAL_MS));
++        }
++    }
++
+     if (deviceID < 0) {
+-        session->backend->log(AQ_LOG_ERROR, std::format("libseat: Couldn't open device at {}", path_));
++        session->backend->log(AQ_LOG_ERROR, std::format("libseat: Couldn't open device at {} (errno {}: {})", path_, errno, strerror(errno)));
+         return;
+     }
+ 
+-- 
+2.56.1
+

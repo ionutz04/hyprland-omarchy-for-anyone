@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Hyprland (fork, uwsm)
+Comment=Hyprland with a patched aquamarine, managed by uwsm
+# NOTE: no quoted arguments here. lightdm splits Exec on spaces and ignores quotes.
+Exec=uwsm start -g -1 -e -D Hyprland -F -- @PREFIX@/bin/start-hyprland-fork
+Type=Application
+DesktopNames=Hyprland
+Keywords=tiling;wayland;compositor;

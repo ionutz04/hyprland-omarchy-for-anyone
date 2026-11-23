@@ -1,0 +1,27 @@
+#!/bin/sh
+# Launcher for the Hyprland fork. Works for any user.
+P=@PREFIX@
+
+# Forked aquamarine: waits for the DRM device instead of failing with EBUSY at login.
+export LD_LIBRARY_PATH="$P/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Multiseat: confine aquamarine to the GPU(s) of this session's seat unless the user already chose.
+if [ -z "$AQ_DRM_DEVICES" ]; then
+  seat="${XDG_SEAT:-seat0}"; cards=""
+  for c in /dev/dri/card*; do
+    [ -e "$c" ] || continue
+    s=$(udevadm info -q property -n "$c" 2>/dev/null | sed -n 's/^ID_SEAT=//p')
+    [ -z "$s" ] && s=seat0
+    [ "$s" = "$seat" ] && cards="${cards:+$cards:}$c"
+  done
+  [ -n "$cards" ] && export AQ_DRM_DEVICES="$cards"
+fi
+
+# Per-user Omarchy, if this user has it.
+if [ -d "$HOME/.local/share/omarchy" ]; then
+  export OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+  export PATH="$OMARCHY_PATH/bin:$PATH"
+fi
+export PATH="$P/bin:$HOME/.local/bin:$PATH"
+
+exec "$P/bin/start-hyprland" --path "$P/bin/Hyprland"
